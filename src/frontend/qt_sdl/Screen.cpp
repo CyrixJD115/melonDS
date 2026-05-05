@@ -885,13 +885,9 @@ bool ScreenPanelGL::createContext()
 {
     std::optional<WindowInfo> windowinfo = getWindowInfo();
 
-    // if our parent window is parented to another window, we will
-    // share our OpenGL context with that window
-    MainWindow* ourwin = (MainWindow*)parentWidget();
-    MainWindow* parentwin = (MainWindow*)parentWidget()->parentWidget();
-    //if (parentwin)
-    if (ourwin->getWindowID() != 0)
+    if (mainWindow->getWindowID() != 0)
     {
+        MainWindow* parentwin = (MainWindow*)mainWindow->parentWidget();
         if (windowinfo.has_value())
             if ((glContext = parentwin->getOGLContext()->CreateSharedContext(*windowinfo)))
                 glContext->DoneCurrent();
@@ -921,7 +917,7 @@ void ScreenPanelGL::initOpenGL()
     if (!glContext) return;
     if (glInited) return;
 
-    glContext->MakeCurrent();
+    if (!glContext->MakeCurrent()) return;
 
     OpenGL::CompileVertexFragmentProgram(screenShaderProgram,
                                          kScreenVS, kScreenFS,

@@ -65,6 +65,8 @@
 #include "ROMInfoDialog.h"
 #include "RAMInfoDialog.h"
 #include "TitleManagerDialog.h"
+#include "ROMLibraryDialog.h"
+#include "ROMLibrarySettingsDialog.h"
 #include "PowerManagement/PowerManagementDialog.h"
 
 #include "Platform.h"
@@ -652,6 +654,9 @@ MainWindow::MainWindow(int id, EmuInstance* inst, QWidget* parent) :
             actPathSettings = menu->addAction("Path settings");
             connect(actPathSettings, &QAction::triggered, this, &MainWindow::onOpenPathSettings);
 
+            actROMLibrarySettings = menu->addAction("ROM library settings");
+            connect(actROMLibrarySettings, &QAction::triggered, this, &MainWindow::onOpenROMLibrarySettings);
+
             menu->addSeparator();
 
             actLimitFramerate = menu->addAction("Limit framerate");
@@ -695,9 +700,16 @@ MainWindow::MainWindow(int id, EmuInstance* inst, QWidget* parent) :
         // if the window was closed in fullscreen do not restore this
         setWindowState(windowState() & ~Qt::WindowFullScreen);
     }
+    else
+    {
+        resize(QSize(256, 384) * 1.2);
+    }
     show();
+    setMinimumSize(size());
 
     panel = nullptr;
+    centralStack = nullptr;
+    homeWidget = nullptr;
     createScreenPanel();
 
     if (hasMenu)
@@ -850,7 +862,6 @@ void MainWindow::createScreenPanel()
 {
     auto oldpanel = panel;
     panel = nullptr;
-    if (oldpanel) delete oldpanel;
 
     hasOGL = globalCfg.GetBool("Screen.UseGL") ||
             (globalCfg.GetInt("3D.Renderer") != renderer3D_Software);
@@ -858,14 +869,47 @@ void MainWindow::createScreenPanel()
     if (hasOGL)
     {
         ScreenPanelGL* panelGL = new ScreenPanelGL(this);
+        panel = panelGL;
+    }
+
+    if (!hasOGL)
+    {
+        ScreenPanelNative* panelNative = new ScreenPanelNative(this);
+        panel = panelNative;
+    }
+
+    if (!centralStack)
+    {
+        centralStack = new QStackedWidget(this);
+
+        homeWidget = new ROMLibraryDialog(this);
+        connect(homeWidget, &ROMLibraryDialog::loadROMRequested, this, &MainWindow::onROMLibraryLoadROM);
+
+        centralStack->addWidget(homeWidget);
+        centralStack->addWidget(panel);
+
+        setCentralWidget(centralStack);
+    }
+    else
+    {
+        if (oldpanel)
+        {
+            centralStack->removeWidget(oldpanel);
+            delete oldpanel;
+        }
+        centralStack->insertWidget(1, panel);
+    }
+
+    showEmulationScreen();
+
+    if (hasOGL)
+    {
+        ScreenPanelGL* panelGL = static_cast<ScreenPanelGL*>(panel);
         panelGL->show();
 
-        // make sure no GL context is in use by the emu thread
-        // otherwise we may fail to create a shared context
         if (windowID != 0)
             emuThread->borrowGL();
 
-        // Check that creating the context hasn't failed
         if (panelGL->createContext() == false)
         {
             Log(Platform::LogLevel::Error, "Failed to create OpenGL context, falling back to Software Renderer.\n");
@@ -874,23 +918,25 @@ void MainWindow::createScreenPanel()
             globalCfg.SetBool("Screen.UseGL", false);
             globalCfg.SetInt("3D.Renderer", renderer3D_Software);
 
+            centralStack->removeWidget(panelGL);
             delete panelGL;
             panelGL = nullptr;
+
+            ScreenPanelNative* panelNative = new ScreenPanelNative(this);
+            panel = panelNative;
+            centralStack->insertWidget(1, panel);
         }
 
         if (windowID != 0)
             emuThread->returnGL();
-
-        panel = panelGL;
     }
 
-    if (!hasOGL)
+    if (!emuThread->emuIsActive())
     {
-        ScreenPanelNative* panelNative = new ScreenPanelNative(this);
-        panel = panelNative;
-        panel->show();
+        if (homeWidget)
+            homeWidget->refreshOnStart();
+        showHomeScreen();
     }
-    setCentralWidget(panel);
 
     if (hasMenu)
         actScreenFiltering->setEnabled(hasOGL);
@@ -1778,6 +1824,29 @@ void MainWindow::onOpenTitleManager()
     TitleManagerDialog* dlg = TitleManagerDialog::openDlg(this);
 }
 
+void MainWindow::onROMLibraryLoadROM(const QString& filepath)
+{
+    if (!verifySetup())
+        return;
+
+    QStringList file;
+    file.append(filepath);
+
+    QString errorstr;
+    if (!emuThread->bootROM(file, errorstr))
+    {
+        QMessageBox::critical(this, "melonDS", errorstr);
+        return;
+    }
+
+    QString filename = file.join('|');
+    recentFileList.removeAll(filename);
+    recentFileList.prepend(filename);
+    updateRecentFilesMenu();
+
+    updateCartInserted(false);
+}
+
 void MainWindow::onMPNewInstance()
 {
     createEmuInstance();
@@ -1961,6 +2030,29 @@ void MainWindow::onPathSettingsFinished(int res)
     if (PathSettingsDialog::needsReset)
         onReset();
 
+    emuThread->emuUnpause();
+}
+
+void MainWindow::onOpenROMLibrarySettings()
+{
+    bool isNew = (ROMLibrarySettingsDialog::currentDlg == nullptr);
+    if (isNew)
+        emuThread->emuPause();
+
+    ROMLibrarySettingsDialog* dlg = ROMLibrarySettingsDialog::openDlg(this);
+    if (isNew)
+    {
+        connect(dlg, &ROMLibrarySettingsDialog::finished, this, &MainWindow::onROMLibrarySettingsFinished);
+        connect(dlg, &ROMLibrarySettingsDialog::romLibrarySettingsChanged, this, [this]()
+        {
+            if (homeWidget)
+                homeWidget->refresh();
+        });
+    }
+}
+
+void MainWindow::onROMLibrarySettingsFinished(int res)
+{
     emuThread->emuUnpause();
 }
 
@@ -2241,6 +2333,18 @@ void MainWindow::onScreenEmphasisToggled()
     emit screenLayoutChange();
 }
 
+void MainWindow::showHomeScreen()
+{
+    if (!centralStack) return;
+    centralStack->setCurrentIndex(0);
+}
+
+void MainWindow::showEmulationScreen()
+{
+    if (!centralStack) return;
+    centralStack->setCurrentIndex(1);
+}
+
 void MainWindow::onEmuStart()
 {
     if (!hasMenu) return;
@@ -2264,6 +2368,8 @@ void MainWindow::onEmuStart()
     actPowerManagement->setEnabled(true);
 
     actTitleManager->setEnabled(false);
+
+    showEmulationScreen();
 }
 
 void MainWindow::onEmuStop()
@@ -2286,6 +2392,10 @@ void MainWindow::onEmuStop()
     actPowerManagement->setEnabled(false);
 
     actTitleManager->setEnabled(!globalCfg.GetString("DSi.NANDPath").empty());
+
+    showHomeScreen();
+    if (homeWidget)
+        homeWidget->refreshOnStart();
 }
 
 void MainWindow::onEmuPause(bool pause)
@@ -2349,11 +2459,23 @@ void MainWindow::onUpdateVideoSettings(bool glchange)
     {
         if (hasOGL) 
         {
+            bool emuActive = emuThread->emuIsActive();
+            showEmulationScreen();
+            for (auto child: childwins)
+                child->showEmulationScreen();
+
             emuThread->initContext(windowID);
             for (auto child: childwins)
             {
                 auto thread = child->getEmuInstance()->getEmuThread();
                 thread->initContext(child->windowID);
+            }
+
+            if (!emuActive)
+            {
+                showHomeScreen();
+                for (auto child: childwins)
+                    child->showHomeScreen();
             }
         }
     }

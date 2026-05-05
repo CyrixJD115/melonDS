@@ -60,6 +60,17 @@ set(SOURCES_QT_SDL
 
     LANDialog.cpp
     NetplayDialog.cpp
+
+    NDSMetadata.h
+    NDSMetadata.cpp
+    RainbowPushButton.h
+    RainbowPushButton.cpp
+    ROMLibraryDialog.h
+    ROMLibraryDialog.cpp
+    ROMLibraryDialog.ui
+    ROMLibrarySettingsDialog.h
+    ROMLibrarySettingsDialog.cpp
+    ROMLibrarySettingsDialog.ui
 )
 
 option(USE_QT6 "Use Qt 6 instead of Qt 5" ON)

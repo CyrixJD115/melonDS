@@ -32,10 +32,12 @@
 #include <QMutex>
 #include <QScreen>
 #include <QCloseEvent>
+#include <QStackedWidget>
 
 #include "Screen.h"
 #include "Config.h"
 #include "MPInterface.h"
+#include "ROMLibraryDialog.h"
 
 
 class EmuInstance;
@@ -130,6 +132,7 @@ private slots:
     void onROMInfo();
     void onRAMInfo();
     void onOpenTitleManager();
+    void onROMLibraryLoadROM(const QString& filepath);
     void onMPNewInstance();
     void onLANStartHost();
     void onLANStartClient();
@@ -156,6 +159,8 @@ private slots:
     void onFirmwareSettingsFinished(int res);
     void onOpenPathSettings();
     void onPathSettingsFinished(int res);
+    void onOpenROMLibrarySettings();
+    void onROMLibrarySettingsFinished(int res);
     void onOpenInterfaceSettings();
     void onInterfaceSettingsFinished(int res);
     void onUpdateInterfaceSettings();
@@ -201,6 +206,9 @@ private:
 
     void createScreenPanel();
 
+    void showHomeScreen();
+    void showEmulationScreen();
+
     bool lanWarning(bool host);
 
     bool showOSD;
@@ -224,6 +232,9 @@ private:
 
 public:
     ScreenPanel* panel;
+
+    QStackedWidget* centralStack;
+    ROMLibraryDialog* homeWidget;
 
     bool hasMenu;
 
@@ -273,6 +284,7 @@ public:
     QAction* actWifiSettings;
     QAction* actFirmwareSettings;
     QAction* actPathSettings;
+    QAction* actROMLibrarySettings;
     QAction* actInterfaceSettings;
     QAction* actScreenSize[4];
     QActionGroup* grpScreenRotation;

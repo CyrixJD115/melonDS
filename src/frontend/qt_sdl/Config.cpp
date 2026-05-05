@@ -288,6 +288,9 @@ LegacyEntry LegacyFile[] =
     {"LastROMFolder", 2, "LastROMFolder", false},
     {"LastBIOSFolder", 2, "LastBIOSFolder", false},
 
+    {"ROMLibraryPath", 2, "ROMLibrary.Path", false},
+    {"ROMLibraryPaths", 2, "ROMLibrary.Paths", false},
+
     {"RecentROM_0", 4, "RecentROM[0]", false},
     {"RecentROM_1", 4, "RecentROM[1]", false},
     {"RecentROM_2", 4, "RecentROM[2]", false},
