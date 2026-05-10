@@ -70,7 +70,7 @@ public:
     virtual u16 RecvReplies(int inst, u8* data, u64 timestamp, u16 aidmask) = 0;
 
 protected:
-    int RecvTimeout = 25;
+    int RecvTimeout = 75;
 
 private:
     static MPInterfaceType CurrentType;

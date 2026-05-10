@@ -95,11 +95,12 @@ LAN::LAN() noexcept : Inited(false)
 
     ConnectedBitmask = 0;
 
-    MPRecvTimeout = 25;
+    MPRecvTimeout = 75;
     LastHostID = -1;
     LastHostPeer = nullptr;
 
     FrameCount = 0;
+    StaleWindowMs = kDefaultStaleWindowMs;
 
     // TODO make this somewhat nicer
     if (enet_initialize() != 0)
@@ -811,7 +812,7 @@ void LAN::ProcessLAN(int type)
         MPPacketHeader* header = (MPPacketHeader*)&enetpacket->data[0];
         u32 packettime = header->Magic;
 
-        if ((packettime > time_last) || (packettime < (time_last - 16)))
+        if ((packettime > time_last) || (packettime < (time_last - StaleWindowMs)))
         {
             RXQueue.pop();
             enet_packet_destroy(enetpacket);
@@ -835,6 +836,21 @@ void LAN::ProcessLAN(int type)
     }
 
     int timeout = (type == 2) ? MPRecvTimeout : 0;
+    if (type == 2)
+    {
+        int maxRtt = 0;
+        for (int i = 0; i < 16; i++)
+        {
+            if (!RemotePeers[i]) continue;
+            int rtt = RemotePeers[i]->roundTripTime;
+            if (rtt > maxRtt)
+                maxRtt = rtt;
+        }
+
+        int adaptive = maxRtt + 20;
+        if (adaptive > timeout)
+            timeout = adaptive;
+    }
     time_last = (u32)Platform::GetMSCount();
 
     ENetEvent event;
@@ -863,6 +879,9 @@ void LAN::ProcessLAN(int type)
 
                 event.packet->userData = event.peer;
                 RXQueue.push(event.packet);
+
+                Platform::Log(Platform::LogLevel::Debug, "LAN: MP packet received sender=%d type=%d len=%d queue=%zu\n",
+                    header->SenderID, header->Type & 0xFFFF, header->Length, RXQueue.size());
 
                 // return now -- if we are receiving MP frames, if we keep going
                 // we'll consume too many even if we have no timeout set
@@ -942,9 +961,16 @@ int LAN::SendPacketGeneric(u32 type, u8* packet, int len, u64 timestamp)
 {
     if (!Host) return 0;
 
-    // TODO make the reliable part optional?
-    //u32 flags = ENET_PACKET_FLAG_RELIABLE;
-    u32 flags = ENET_PACKET_FLAG_UNSEQUENCED;
+    u32 packetType = type & 0xFFFF;
+    u32 flags;
+    if (packetType == 1 || packetType == 3)
+    {
+        flags = ENET_PACKET_FLAG_RELIABLE;
+    }
+    else
+    {
+        flags = ENET_PACKET_FLAG_UNSEQUENCED;
+    }
 
     ENetPacket* enetpacket = enet_packet_create(nullptr, sizeof(MPPacketHeader)+len, flags);
 
@@ -1061,9 +1087,13 @@ u16 LAN::RecvReplies(int inst, u8* packets, u64 timestamp, u16 aidmask)
         MPPacketHeader* header = (MPPacketHeader*)&enetpacket->data[0];
         bool good = true;
         if ((header->Type & 0xFFFF) != 2)
+        {
             good = false;
-        else if (header->Timestamp < (timestamp - 32))
+        }
+        else if (header->Timestamp < (timestamp - 10000))
+        {
             good = false;
+        }
 
         if (good)
         {
@@ -1082,10 +1112,15 @@ u16 LAN::RecvReplies(int inst, u8* packets, u64 timestamp, u16 aidmask)
             if (((myinstmask & ConnectedBitmask) == ConnectedBitmask) ||
                 ((ret & aidmask) == aidmask))
             {
-                // all the clients have sent their reply
+                Platform::Log(Platform::LogLevel::Debug, "LAN: RecvReplies done ret=0x%04X aidmask=0x%04X\n", ret, aidmask);
                 enet_packet_destroy(enetpacket);
                 return ret;
             }
+        }
+        else
+        {
+            Platform::Log(Platform::LogLevel::Debug, "LAN: RecvReplies discarding stale/bad packet type=%d ts=%llu threshold=%llu\n",
+                header->Type & 0xFFFF, (unsigned long long)header->Timestamp, (unsigned long long)(timestamp - 10000));
         }
 
         enet_packet_destroy(enetpacket);

@@ -62,7 +62,7 @@ DefaultList<int> DefaultInts =
     {"Instance*.Firmware.BirthdayMonth", 1},
     {"Instance*.Firmware.BirthdayDay", 1},
     {"MP.AudioMode", 1},
-    {"MP.RecvTimeout", 25},
+    {"MP.RecvTimeout", 75},
     {"Instance*.Audio.Volume", 256},
     {"Mic.InputType", 1},
     {"Mouse.HideSeconds", 5},
@@ -90,6 +90,7 @@ RangeList IntRanges =
     {"Instance*.Window*.ScreenAspectTop", {0, AspectRatiosNum-1}},
     {"Instance*.Window*.ScreenAspectBot", {0, AspectRatiosNum-1}},
     {"MP.AudioMode", {0, 2}},
+    {"MP.RecvTimeout", {10, 5000}},
     {"LAN.HostNumPlayers", {2, 16}},
 };
 

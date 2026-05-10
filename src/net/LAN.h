@@ -137,6 +137,9 @@ private:
 
     u32 FrameCount;
 
+    static const int kDefaultStaleWindowMs = 100;
+    int StaleWindowMs;
+
     void ProcessDiscovery();
 
     void HostUpdatePlayerList();

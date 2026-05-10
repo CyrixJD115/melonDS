@@ -1156,12 +1156,13 @@ bool Wifi::ProcessTX(TXSlot* slot, int num)
                 SetIRQ(1);
             }
 
-            if (MPClientFail && false)
+            if (MPClientFail)
             {
-                // if some clients failed to respond: try again
-                // TODO: fix this (causes instability)
-                StartTX_Cmd();
-                break;
+                if (CmdCounter > 800)
+                {
+                    StartTX_Cmd();
+                    break;
+                }
             }
             else
             {
